@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const ACCESS_COOKIE = "site_access";
 const ADMIN_COOKIE = "admin_access";
 
 function isPublicPath(pathname: string) {
   return (
-    pathname === "/unlock" ||
-    pathname === "/api/unlock" ||
     pathname === "/admin/login" ||
     pathname === "/api/admin/login" ||
     pathname.startsWith("/_next") ||
@@ -38,17 +35,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  const hasAccess = request.cookies.get(ACCESS_COOKIE)?.value === "granted";
-
-  if (hasAccess) {
-    return NextResponse.next();
-  }
-
-  const redirectUrl = request.nextUrl.clone();
-  redirectUrl.pathname = "/unlock";
-  redirectUrl.searchParams.set("next", pathname + request.nextUrl.search);
-
-  return NextResponse.redirect(redirectUrl);
+  return NextResponse.next();
 }
 
 export const config = {

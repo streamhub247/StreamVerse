@@ -3,8 +3,7 @@ import { createHash } from "crypto";
 import { getDatabase } from "@/lib/mongodb";
 import StreamPlayer from "./stream-player";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 15;
 
 const STREAMS_APIS = [
   { label: "Primary", url: "https://api.ppv.to/api/streams" },
@@ -237,7 +236,7 @@ async function fetchStreamedSources(streamName: string, streamSlug: string): Pro
 
   const results = await Promise.allSettled(
     endpoints.map(async (url) => {
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetch(url, { next: { revalidate: 15 } });
       if (!res.ok) {
         return [] as StreamedMatch[];
       }
@@ -259,7 +258,7 @@ async function fetchStreamedSources(streamName: string, streamSlug: string): Pro
     match.sources.map(async (source) => {
       const res = await fetch(
         `${STREAMED_API_BASE}/api/stream/${source.source}/${source.id}`,
-        { cache: "no-store" }
+        { next: { revalidate: 15 } }
       );
       if (!res.ok) {
         return null;
@@ -325,7 +324,7 @@ export default async function StreamPage({ params }: Props) {
   try {
     const results = await Promise.allSettled(
       STREAMS_APIS.map(async (api) => {
-        const res = await fetch(api.url, { cache: "no-store" });
+        const res = await fetch(api.url, { next: { revalidate: 15 } });
         if (!res.ok) {
           return null;
         }
