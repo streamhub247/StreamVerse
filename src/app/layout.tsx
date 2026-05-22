@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { getDatabase } from "@/lib/mongodb";
 import "./globals.css";
@@ -65,6 +66,11 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
+        <Script
+          id="popunder-global"
+          src="https://pl29523896.effectivecpmnetwork.com/f4/5e/08/f45e08efcf787f5e4b6b0cc0100a32b4.js"
+          strategy="afterInteractive"
+        />
         {notice && (
           <div className={`w-full text-sm ${toneClasses[notice.tone]}`}>
             <div className="mx-auto max-w-6xl px-6 py-2 text-center font-medium">
@@ -72,7 +78,14 @@ export default async function RootLayout({
             </div>
           </div>
         )}
-        {children}
+        <main className="flex-1">
+          {children}
+        </main>
+        <footer className="mt-10 border-t border-zinc-900/80 bg-black/70 text-zinc-300">
+          <div className="mx-auto max-w-6xl px-6 py-6 text-center text-xs sm:text-sm">
+            Disclaimer: We only link to streams available on the internet. We do not host any content.
+          </div>
+        </footer>
       </body>
     </html>
   );

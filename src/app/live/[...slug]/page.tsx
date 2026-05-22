@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Script from "next/script";
 import { createHash } from "crypto";
 import { getDatabase } from "@/lib/mongodb";
 import StreamPlayer from "./stream-player";
@@ -535,6 +536,14 @@ export default async function StreamPage({ params }: Props) {
                 <div className="text-xs text-zinc-500">HD • Auto</div>
               </div>
               <StreamPlayer sources={streamSources} />
+            </div>
+            <div className="w-full">
+              <Script
+                id="ad-native-vertical"
+                src="https://pl29523897.effectivecpmnetwork.com/caf69c5551a00e68cd92971666f554dc/invoke.js"
+                strategy="afterInteractive"
+              />
+              <div id="container-caf69c5551a00e68cd92971666f554dc" />
             </div>
           </div>
 

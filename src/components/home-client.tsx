@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Script from "next/script";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -211,6 +212,23 @@ function StreamRail({ title, streams, now, id }: { title: string; streams: Strea
   );
 }
 
+function AdSlot({ id }: { id: string }) {
+  return (
+    <div className="flex justify-center py-6">
+      <div className="w-full max-w-182 min-h-22.5 rounded-xl border border-zinc-800/70 bg-zinc-950/70 px-4 py-3">
+        <Script id={`ad-config-${id}`} strategy="afterInteractive">
+          {`window.atOptions = { key: "4573b860ddca38fd3cce4eeeec7f78bd", format: "iframe", height: 90, width: 728, params: {} };`}
+        </Script>
+        <Script
+          id={`ad-loader-${id}`}
+          src="https://www.highperformanceformat.com/4573b860ddca38fd3cce4eeeec7f78bd/invoke.js"
+          strategy="afterInteractive"
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function HomeClient({ initialData }: { initialData: HomeData }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -330,13 +348,15 @@ export default function HomeClient({ initialData }: { initialData: HomeData }) {
         <StreamRail id="starting-soon" title="Starting soon" streams={upcomingStreams.slice(0, 12)} now={now} />
         <StreamRail title="Trending today" streams={trendingStreams} now={now} />
 
-        {categoryRails.map((category) => (
-          <StreamRail
-            key={category.category}
-            title={`Popular in ${category.category}`}
-            streams={category.streams.slice(0, 12)}
-            now={now}
-          />
+        {categoryRails.map((category, index) => (
+          <div key={category.category}>
+            <StreamRail
+              title={`Popular in ${category.category}`}
+              streams={category.streams.slice(0, 12)}
+              now={now}
+            />
+            <AdSlot id={`category-${index}`} />
+          </div>
         ))}
 
         <section id="categories" className="mb-8">
