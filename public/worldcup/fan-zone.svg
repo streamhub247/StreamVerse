@@ -1,0 +1,20 @@
+<svg width="1200" height="675" viewBox="0 0 1200 675" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#121212" />
+      <stop offset="100%" stop-color="#2a0f2f" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#bg)" />
+  <g opacity="0.22" fill="#ffffff">
+    <circle cx="220" cy="180" r="60" />
+    <circle cx="350" cy="140" r="40" />
+    <circle cx="980" cy="220" r="90" />
+  </g>
+  <text x="80" y="230" fill="#ffffff" font-size="48" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    FAN ZONES
+  </text>
+  <text x="80" y="290" fill="#f3b6ff" font-size="22" font-family="Arial, Helvetica, sans-serif">
+    Watch parties, highlights, and live atmosphere
+  </text>
+</svg>

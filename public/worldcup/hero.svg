@@ -1,0 +1,24 @@
+<svg width="1200" height="675" viewBox="0 0 1200 675" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0f1f" />
+      <stop offset="55%" stop-color="#6b1025" />
+      <stop offset="100%" stop-color="#0b0b0b" />
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#ffb3c1" stop-opacity="0.6" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#bg)" />
+  <rect width="1200" height="675" fill="url(#glow)" />
+  <circle cx="950" cy="150" r="120" fill="#f5f5f5" fill-opacity="0.08" />
+  <circle cx="980" cy="200" r="200" fill="#ffffff" fill-opacity="0.05" />
+  <path d="M140 520 C260 420, 420 420, 540 520 S 820 620, 1020 520" stroke="#ffffff" stroke-opacity="0.2" stroke-width="4" />
+  <text x="80" y="220" fill="#ffffff" font-size="54" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    WORLD CUP 2026
+  </text>
+  <text x="80" y="280" fill="#f7c6d0" font-size="24" font-family="Arial, Helvetica, sans-serif">
+    Special coverage • Matches • Fan zones
+  </text>
+</svg>
