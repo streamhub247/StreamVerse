@@ -23,6 +23,8 @@ export default function StreamPlayer({ sources, initialIndex = 0 }: StreamPlayer
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(initialIndex);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -45,19 +47,41 @@ export default function StreamPlayer({ sources, initialIndex = 0 }: StreamPlayer
       return;
     }
 
+    const handleTimeUpdate = () => setCurrentTime(video.currentTime);
+    const handleLoadedMetadata = () => setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+    const handleDurationChange = () => setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+
+    video.addEventListener("timeupdate", handleTimeUpdate);
+    video.addEventListener("loadedmetadata", handleLoadedMetadata);
+    video.addEventListener("durationchange", handleDurationChange);
+
     if (Hls.isSupported()) {
       const hls = new Hls();
       hls.loadSource(activeSource.src);
       hls.attachMedia(video);
       return () => {
         hls.destroy();
+        video.removeEventListener("timeupdate", handleTimeUpdate);
+        video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+        video.removeEventListener("durationchange", handleDurationChange);
       };
     }
 
     if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = activeSource.src;
     }
+
+    return () => {
+      video.removeEventListener("timeupdate", handleTimeUpdate);
+      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      video.removeEventListener("durationchange", handleDurationChange);
+    };
   }, [activeKind, activeSource.src]);
+
+  useEffect(() => {
+    setCurrentTime(0);
+    setDuration(0);
+  }, [activeIndex]);
 
   const toggleFullscreen = async () => {
     const container = containerRef.current;
@@ -73,6 +97,27 @@ export default function StreamPlayer({ sources, initialIndex = 0 }: StreamPlayer
 
     await container.requestFullscreen();
     setIsFullscreen(true);
+  };
+
+  const rewindSeconds = 15;
+  const handleRewind = () => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+    const nextTime = Math.max(0, video.currentTime - rewindSeconds);
+    video.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  };
+
+  const handleSeek = (value: number) => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+    const nextTime = Math.min(Math.max(0, value), duration || 0);
+    video.currentTime = nextTime;
+    setCurrentTime(nextTime);
   };
 
   return (
@@ -128,6 +173,33 @@ export default function StreamPlayer({ sources, initialIndex = 0 }: StreamPlayer
             {isFullscreen ? "" : ""}
           </button>
         </div>
+        {activeKind === "m3u8" ? (
+          <div className="flex flex-col gap-3 border-t border-white/10 bg-black/70 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleRewind}
+                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/20"
+              >
+                ↺ {rewindSeconds}s
+              </button>
+              <div className="text-xs text-white/60">Drag to seek</div>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={duration || 0}
+              step={0.1}
+              value={Math.min(currentTime, duration || 0)}
+              onChange={(event) => handleSeek(Number(event.target.value))}
+              className="w-full accent-red-500"
+            />
+          </div>
+        ) : (
+          <div className="border-t border-white/10 bg-black/70 px-4 py-3 text-xs text-white/60">
+            Rewind and seek are available for M3U8 sources only.
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-zinc-950/80 px-5 py-4">
