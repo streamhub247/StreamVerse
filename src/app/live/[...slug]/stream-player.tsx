@@ -24,6 +24,10 @@ export default function StreamPlayer({ sources, initialIndex = 0 }: StreamPlayer
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(initialIndex);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   const activeSource = sources[activeIndex] ?? sources[0];
   const activeKind = activeSource?.kind ?? "embed";
 
@@ -96,11 +100,11 @@ export default function StreamPlayer({ sources, initialIndex = 0 }: StreamPlayer
             <img
               src="https://assets.football-logos.cc/logos/tournaments/1500x1500/fifa-world-cup-2026--white.10e0b37b.png"
               alt="Watermark"
-              className={`${isFullscreen ? "h-38 w-38" : "h-10 w-10"} opacity-90`}
+              className={`${isFullscreen ? "h-28 w-28" : "h-10 w-10"} opacity-90`}
               loading="lazy"
             />
             <span
-              className={`-mt-8 ${isFullscreen ? "text-sm" : "text-[11px]"}  text-white/80 bg-black/40 px-2 py-0.5 rounded`}
+              className={`-mt+1 ${isFullscreen ? "text-sm" : "text-[11px]"}  text-white/80 bg-black/40 px-2 py-0.5 rounded`}
             >
               FIFA WC 26 soon.
             </span>
@@ -121,7 +125,7 @@ export default function StreamPlayer({ sources, initialIndex = 0 }: StreamPlayer
                 </svg>
               )}
             </span>
-            {isFullscreen ? "Exit full screen" : "Full screen"}
+            {isFullscreen ? "" : ""}
           </button>
         </div>
       </div>
