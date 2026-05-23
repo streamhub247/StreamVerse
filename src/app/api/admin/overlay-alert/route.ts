@@ -2,24 +2,36 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
 
 const ADMIN_COOKIE = "admin_access";
-const NOTICE_ID = "global_notice";
+const ALERT_ID = "global_overlay_alert";
 
-type NoticePayload = {
+type OverlayAlertPayload = {
   title?: string;
   message: string;
   enabled: boolean;
-  tone: "info" | "warning" | "success" | "danger";
   size?: "sm" | "md" | "lg";
   backgroundColor?: string;
   textColor?: string;
   imageUrl?: string;
   ctaText?: string;
   ctaUrl?: string;
+  target?: "all" | "home" | "admin" | "custom";
+  customPaths?: string[];
+  imageSize?: "sm" | "md" | "lg";
+  imageSizePercent?: number;
   updatedAt: string;
 };
 
-const VALID_TONES: NoticePayload["tone"][] = ["info", "warning", "success", "danger"];
-const VALID_SIZES: NonNullable<NoticePayload["size"]>[] = ["sm", "md", "lg"];
+const VALID_SIZES: NonNullable<OverlayAlertPayload["size"]>[] = ["sm", "md", "lg"];
+const VALID_TARGETS: NonNullable<OverlayAlertPayload["target"]>[] = ["all", "home", "admin", "custom"];
+const VALID_IMAGE_SIZES: NonNullable<OverlayAlertPayload["imageSize"]>[] = ["sm", "md", "lg"];
+
+function requireAdmin(request: NextRequest) {
+  const hasAccess = request.cookies.get(ADMIN_COOKIE)?.value === "granted";
+  if (!hasAccess) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
+  return null;
+}
 
 function safeColor(value: unknown) {
   if (typeof value !== "string") {
@@ -35,14 +47,6 @@ function safeColor(value: unknown) {
   return undefined;
 }
 
-function requireAdmin(request: NextRequest) {
-  const hasAccess = request.cookies.get(ADMIN_COOKIE)?.value === "granted";
-  if (!hasAccess) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-  return null;
-}
-
 export async function GET(request: NextRequest) {
   const auth = requireAdmin(request);
   if (auth) {
@@ -55,22 +59,20 @@ export async function GET(request: NextRequest) {
     title?: string;
     message: string;
     enabled: boolean;
-    tone?: NoticePayload["tone"];
-    size?: NoticePayload["size"];
+    size?: OverlayAlertPayload["size"];
     backgroundColor?: string;
     textColor?: string;
     imageUrl?: string;
     ctaText?: string;
     ctaUrl?: string;
     updatedAt: string;
-  }>("site_notices");
-  const record = await collection.findOne({ _id: NOTICE_ID });
+  }>("site_overlays");
+  const record = await collection.findOne({ _id: ALERT_ID });
 
   return NextResponse.json({
     title: record?.title ?? "",
     message: record?.message ?? "",
     enabled: record?.enabled ?? false,
-    tone: record?.tone ?? "warning",
     size: record?.size ?? "md",
     backgroundColor: record?.backgroundColor ?? "",
     textColor: record?.textColor ?? "",
@@ -87,12 +89,10 @@ export async function POST(request: NextRequest) {
     return auth;
   }
 
-  const body = (await request.json()) as Partial<NoticePayload>;
+  const body = (await request.json()) as Partial<OverlayAlertPayload>;
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const message = typeof body.message === "string" ? body.message.trim() : "";
   const enabled = Boolean(body.enabled);
-  const tone = body.tone ?? "warning";
-  const safeTone = VALID_TONES.includes(tone) ? tone : "warning";
   const size = body.size ?? "md";
   const safeSize = VALID_SIZES.includes(size) ? size : "md";
   const backgroundColor = safeColor(body.backgroundColor);
@@ -100,6 +100,14 @@ export async function POST(request: NextRequest) {
   const imageUrl = typeof body.imageUrl === "string" ? body.imageUrl.trim() : "";
   const ctaText = typeof body.ctaText === "string" ? body.ctaText.trim() : "";
   const ctaUrl = typeof body.ctaUrl === "string" ? body.ctaUrl.trim() : "";
+  const target = (body.target as OverlayAlertPayload["target"]) ?? "all";
+  const safeTarget = VALID_TARGETS.includes(target) ? target : "all";
+  const customPaths = Array.isArray(body.customPaths) ? body.customPaths.map((s) => String(s).trim()).filter(Boolean) : [];
+  const imageSize = (body.imageSize as OverlayAlertPayload["imageSize"]) ?? "md";
+  const safeImageSize = VALID_IMAGE_SIZES.includes(imageSize) ? imageSize : "md";
+  const imageSizePercent = Number.isFinite(Number(body.imageSizePercent))
+    ? Math.max(1, Math.min(2000, Number(body.imageSizePercent)))
+    : undefined;
 
   const db = await getDatabase();
   const collection = db.collection<{
@@ -107,30 +115,36 @@ export async function POST(request: NextRequest) {
     title?: string;
     message: string;
     enabled: boolean;
-    tone: NoticePayload["tone"];
-    size?: NoticePayload["size"];
+    size?: OverlayAlertPayload["size"];
     backgroundColor?: string;
     textColor?: string;
     imageUrl?: string;
     ctaText?: string;
     ctaUrl?: string;
+    target?: OverlayAlertPayload["target"];
+    customPaths?: string[];
+    imageSize?: OverlayAlertPayload["imageSize"];
+    imageSizePercent?: number;
     updatedAt: string;
-  }>("site_notices");
+  }>("site_overlays");
 
   await collection.updateOne(
-    { _id: NOTICE_ID },
+    { _id: ALERT_ID },
     {
       $set: {
         title,
         message,
         enabled,
-        tone: safeTone,
         size: safeSize,
         backgroundColor,
         textColor,
         imageUrl: imageUrl || undefined,
         ctaText: ctaText || undefined,
         ctaUrl: ctaUrl || undefined,
+          target: safeTarget,
+          customPaths: customPaths.length ? customPaths : undefined,
+          imageSize: safeImageSize,
+          imageSizePercent: imageSizePercent,
         updatedAt: new Date().toISOString(),
       },
     },

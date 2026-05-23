@@ -66,10 +66,32 @@ export default function AdminClient({ streams }: AdminClientProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState("");
+  const [noticeTitle, setNoticeTitle] = useState("");
   const [noticeEnabled, setNoticeEnabled] = useState(false);
   const [noticeTone, setNoticeTone] = useState<"info" | "warning" | "success" | "danger">("warning");
+  const [noticeSize, setNoticeSize] = useState<"sm" | "md" | "lg">("md");
+  const [noticeBackgroundColor, setNoticeBackgroundColor] = useState("");
+  const [noticeTextColor, setNoticeTextColor] = useState("");
+  const [noticeImageUrl, setNoticeImageUrl] = useState("");
+  const [noticeCtaText, setNoticeCtaText] = useState("");
+  const [noticeCtaUrl, setNoticeCtaUrl] = useState("");
   const [noticeSaving, setNoticeSaving] = useState(false);
   const [noticeLoaded, setNoticeLoaded] = useState(false);
+  const [overlayTitle, setOverlayTitle] = useState("");
+  const [overlayMessage, setOverlayMessage] = useState("");
+  const [overlayEnabled, setOverlayEnabled] = useState(false);
+  const [overlaySize, setOverlaySize] = useState<"sm" | "md" | "lg">("md");
+  const [overlayBackgroundColor, setOverlayBackgroundColor] = useState("");
+  const [overlayTextColor, setOverlayTextColor] = useState("");
+  const [overlayImageUrl, setOverlayImageUrl] = useState("");
+  const [overlayCtaText, setOverlayCtaText] = useState("");
+  const [overlayCtaUrl, setOverlayCtaUrl] = useState("");
+  const [overlaySaving, setOverlaySaving] = useState(false);
+  const [overlayLoaded, setOverlayLoaded] = useState(false);
+  const [overlayTarget, setOverlayTarget] = useState<"all" | "home" | "admin" | "custom">("all");
+  const [overlayCustomPaths, setOverlayCustomPaths] = useState("");
+  const [overlayImageSize, setOverlayImageSize] = useState<"sm" | "md" | "lg">("md");
+  const [overlayImageSizePercent, setOverlayImageSizePercent] = useState<number | "">("");
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const [kind, setKind] = useState<"embed" | "m3u8">("embed");
@@ -184,15 +206,31 @@ export default function AdminClient({ streams }: AdminClientProps) {
           return;
         }
         const data = (await res.json()) as {
+          title?: string;
           message?: string;
           enabled?: boolean;
           tone?: "info" | "warning" | "success" | "danger";
+          size?: "sm" | "md" | "lg";
+          backgroundColor?: string;
+          textColor?: string;
+          imageUrl?: string;
+          ctaText?: string;
+          ctaUrl?: string;
         };
+        setNoticeTitle(data.title ?? "");
         setNoticeMessage(data.message ?? "");
         setNoticeEnabled(Boolean(data.enabled));
         if (data.tone) {
           setNoticeTone(data.tone);
         }
+        if (data.size) {
+          setNoticeSize(data.size);
+        }
+        setNoticeBackgroundColor(data.backgroundColor ?? "");
+        setNoticeTextColor(data.textColor ?? "");
+        setNoticeImageUrl(data.imageUrl ?? "");
+        setNoticeCtaText(data.ctaText ?? "");
+        setNoticeCtaUrl(data.ctaUrl ?? "");
       } finally {
         setNoticeLoaded(true);
       }
@@ -200,6 +238,54 @@ export default function AdminClient({ streams }: AdminClientProps) {
 
     void loadNotice();
   }, [noticeLoaded]);
+
+  useEffect(() => {
+    if (overlayLoaded) {
+      return;
+    }
+
+    const loadOverlay = async () => {
+      try {
+        const res = await fetch("/api/admin/overlay-alert");
+        if (!res.ok) {
+          return;
+        }
+        const data = (await res.json()) as {
+          title?: string;
+          message?: string;
+          enabled?: boolean;
+          size?: "sm" | "md" | "lg";
+          backgroundColor?: string;
+          textColor?: string;
+          imageUrl?: string;
+          ctaText?: string;
+          ctaUrl?: string;
+          target?: "all" | "home" | "admin" | "custom";
+          customPaths?: string[];
+          imageSize?: "sm" | "md" | "lg";
+        };
+        setOverlayTitle(data.title ?? "");
+        setOverlayMessage(data.message ?? "");
+        setOverlayEnabled(Boolean(data.enabled));
+        if (data.size) {
+          setOverlaySize(data.size);
+        }
+        setOverlayBackgroundColor(data.backgroundColor ?? "");
+        setOverlayTextColor(data.textColor ?? "");
+        setOverlayImageUrl(data.imageUrl ?? "");
+        setOverlayCtaText(data.ctaText ?? "");
+        setOverlayCtaUrl(data.ctaUrl ?? "");
+        setOverlayTarget(data.target ?? "all");
+        setOverlayCustomPaths((data.customPaths ?? []).join("\n"));
+        setOverlayImageSize(data.imageSize ?? "md");
+        setOverlayImageSizePercent(data.imageSizePercent ?? "");
+      } finally {
+        setOverlayLoaded(true);
+      }
+    };
+
+    void loadOverlay();
+  }, [overlayLoaded]);
 
   const handleAdd = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -338,13 +424,46 @@ export default function AdminClient({ streams }: AdminClientProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          title: noticeTitle,
           message: noticeMessage,
           enabled: noticeEnabled,
           tone: noticeTone,
+          size: noticeSize,
+          backgroundColor: noticeBackgroundColor,
+          textColor: noticeTextColor,
+          imageUrl: noticeImageUrl,
+          ctaText: noticeCtaText,
+          ctaUrl: noticeCtaUrl,
         }),
       });
     } finally {
       setNoticeSaving(false);
+    }
+  };
+
+  const handleOverlaySave = async () => {
+    setOverlaySaving(true);
+    try {
+      await fetch("/api/admin/overlay-alert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: overlayTitle,
+          message: overlayMessage,
+          enabled: overlayEnabled,
+          size: overlaySize,
+          backgroundColor: overlayBackgroundColor,
+          textColor: overlayTextColor,
+          imageUrl: overlayImageUrl,
+          ctaText: overlayCtaText,
+          ctaUrl: overlayCtaUrl,
+          target: overlayTarget,
+          customPaths: overlayCustomPaths.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
+          imageSizePercent: typeof overlayImageSizePercent === "number" ? overlayImageSizePercent : undefined,
+        }),
+      });
+    } finally {
+      setOverlaySaving(false);
     }
   };
 
@@ -497,6 +616,110 @@ export default function AdminClient({ streams }: AdminClientProps) {
               Show notice
             </label>
           </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Alert title (optional)</label>
+              <input
+                value={noticeTitle}
+                onChange={(event) => setNoticeTitle(event.target.value)}
+                placeholder="Important update"
+                className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Alert size</label>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { label: "Small", value: "sm" },
+                  { label: "Medium", value: "md" },
+                  { label: "Large", value: "lg" },
+                ] as const).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold ${
+                      noticeSize === option.value
+                        ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                        : "border-zinc-800/80 bg-black/60 text-zinc-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="notice-size"
+                      value={option.value}
+                      checked={noticeSize === option.value}
+                      onChange={() => setNoticeSize(option.value)}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Background color (hex)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={noticeBackgroundColor || "#f59e0b"}
+                  onChange={(event) => setNoticeBackgroundColor(event.target.value)}
+                  className="h-10 w-12 rounded border border-zinc-800/80 bg-black/70"
+                />
+                <input
+                  value={noticeBackgroundColor}
+                  onChange={(event) => setNoticeBackgroundColor(event.target.value)}
+                  placeholder="#f59e0b"
+                  className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Text color (hex)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={noticeTextColor || "#0b0b0b"}
+                  onChange={(event) => setNoticeTextColor(event.target.value)}
+                  className="h-10 w-12 rounded border border-zinc-800/80 bg-black/70"
+                />
+                <input
+                  value={noticeTextColor}
+                  onChange={(event) => setNoticeTextColor(event.target.value)}
+                  placeholder="#0b0b0b"
+                  className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Alert image URL (optional)</label>
+              <input
+                value={noticeImageUrl}
+                onChange={(event) => setNoticeImageUrl(event.target.value)}
+                placeholder="https://..."
+                className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">CTA text (optional)</label>
+              <input
+                value={noticeCtaText}
+                onChange={(event) => setNoticeCtaText(event.target.value)}
+                placeholder="View update"
+                className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+              />
+            </div>
+          </div>
+          <div className="mt-4">
+            <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">CTA URL (optional)</label>
+            <input
+              value={noticeCtaUrl}
+              onChange={(event) => setNoticeCtaUrl(event.target.value)}
+              placeholder="https://..."
+              className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+            />
+          </div>
           <div className="mt-4 flex flex-wrap gap-3">
             {([
               { label: "Info", value: "info", className: "border-sky-500/40 bg-sky-500/10 text-sky-200" },
@@ -520,6 +743,223 @@ export default function AdminClient({ streams }: AdminClientProps) {
                 {option.label}
               </label>
             ))}
+          </div>
+        </section>
+        <section className="rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Overlay alert</h2>
+              <p className="text-sm text-zinc-400">
+                Display a full-page alert overlay above the entire site and streams.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleOverlaySave}
+              disabled={overlaySaving}
+              className="rounded-full bg-red-600 px-5 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {overlaySaving ? "Saving..." : "Save overlay"}
+            </button>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+            <textarea
+              value={overlayMessage}
+              onChange={(event) => setOverlayMessage(event.target.value)}
+              placeholder="Enter overlay message..."
+              className="min-h-24 w-full rounded-2xl border border-zinc-800/80 bg-black/60 px-4 py-3 text-sm text-white"
+            />
+            <label className="inline-flex items-center gap-2 text-sm text-zinc-300">
+              <input
+                type="checkbox"
+                checked={overlayEnabled}
+                onChange={(event) => setOverlayEnabled(event.target.checked)}
+              />
+              Show overlay
+            </label>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Show on</label>
+              <div className="flex flex-col gap-2">
+                {([
+                  { label: "All pages", value: "all" },
+                  { label: "Home only", value: "home" },
+                  { label: "Admin only", value: "admin" },
+                  { label: "Custom paths", value: "custom" },
+                ] as const).map((opt) => (
+                  <label key={opt.value} className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="overlay-target"
+                      value={opt.value}
+                      checked={overlayTarget === opt.value}
+                      onChange={() => setOverlayTarget(opt.value)}
+                    />
+                    <span className="text-sm">{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Image size</label>
+              <div className="flex gap-2">
+                {([
+                  { label: "Small", value: "sm" },
+                  { label: "Medium", value: "md" },
+                  { label: "Large", value: "lg" },
+                ] as const).map((opt) => (
+                  <label
+                    key={opt.value}
+                    className={`flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold ${
+                      overlayImageSize === opt.value
+                        ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                        : "border-zinc-800/80 bg-black/60 text-zinc-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="overlay-image-size"
+                      value={opt.value}
+                      checked={overlayImageSize === opt.value}
+                      onChange={() => setOverlayImageSize(opt.value)}
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          {overlayTarget === "custom" && (
+            <div className="mt-4">
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Custom paths (one per line)</label>
+              <textarea
+                value={overlayCustomPaths}
+                onChange={(e) => setOverlayCustomPaths(e.target.value)}
+                placeholder="/special-event\n/live/some-stream"
+                className="min-h-20 w-full rounded-2xl border border-zinc-800/80 bg-black/60 px-4 py-3 text-sm text-white"
+              />
+            </div>
+          )}
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Overlay title (optional)</label>
+              <input
+                value={overlayTitle}
+                onChange={(event) => setOverlayTitle(event.target.value)}
+                placeholder="Emergency update"
+                className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Overlay size</label>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { label: "Small", value: "sm" },
+                  { label: "Medium", value: "md" },
+                  { label: "Large", value: "lg" },
+                ] as const).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold ${
+                      overlaySize === option.value
+                        ? "border-red-500/60 bg-red-500/10 text-red-200"
+                        : "border-zinc-800/80 bg-black/60 text-zinc-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="overlay-size"
+                      value={option.value}
+                      checked={overlaySize === option.value}
+                      onChange={() => setOverlaySize(option.value)}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Background color (hex)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={overlayBackgroundColor || "#111827"}
+                  onChange={(event) => setOverlayBackgroundColor(event.target.value)}
+                  className="h-10 w-12 rounded border border-zinc-800/80 bg-black/70"
+                />
+                <input
+                  value={overlayBackgroundColor}
+                  onChange={(event) => setOverlayBackgroundColor(event.target.value)}
+                  placeholder="#111827"
+                  className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Text color (hex)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={overlayTextColor || "#f9fafb"}
+                  onChange={(event) => setOverlayTextColor(event.target.value)}
+                  className="h-10 w-12 rounded border border-zinc-800/80 bg-black/70"
+                />
+                <input
+                  value={overlayTextColor}
+                  onChange={(event) => setOverlayTextColor(event.target.value)}
+                  placeholder="#f9fafb"
+                  className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Image size (%)</label>
+              <input
+                type="number"
+                min={1}
+                max={2000}
+                value={overlayImageSizePercent as any}
+                onChange={(e) => setOverlayImageSizePercent(e.target.value === "" ? "" : Number(e.target.value))}
+                placeholder="100"
+                className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+              />
+              <p className="mt-2 text-xs text-zinc-500">Enter percentage to scale the image (e.g. 100 = base size, 500 = 5x).</p>
+            </div>
+            <div />
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Overlay image URL (optional)</label>
+              <input
+                value={overlayImageUrl}
+                onChange={(event) => setOverlayImageUrl(event.target.value)}
+                placeholder="https://..."
+                className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">CTA text (optional)</label>
+              <input
+                value={overlayCtaText}
+                onChange={(event) => setOverlayCtaText(event.target.value)}
+                placeholder="Read more"
+                className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+              />
+            </div>
+          </div>
+          <div className="mt-4">
+            <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">CTA URL (optional)</label>
+            <input
+              value={overlayCtaUrl}
+              onChange={(event) => setOverlayCtaUrl(event.target.value)}
+              placeholder="https://..."
+              className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+            />
           </div>
         </section>
         <section className="rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-6">
