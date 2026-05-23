@@ -263,6 +263,7 @@ export default function AdminClient({ streams }: AdminClientProps) {
           target?: "all" | "home" | "admin" | "custom";
           customPaths?: string[];
           imageSize?: "sm" | "md" | "lg";
+          imageSizePercent?: number | null;
         };
         setOverlayTitle(data.title ?? "");
         setOverlayMessage(data.message ?? "");

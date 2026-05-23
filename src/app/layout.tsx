@@ -77,7 +77,11 @@ async function getOverlayAlert() {
       imageUrl?: string;
       ctaText?: string;
       ctaUrl?: string;
-    }>("site_overlays");
+        target?: "all" | "home" | "admin" | "custom";
+        customPaths?: string[];
+        imageSize?: "sm" | "md" | "lg";
+        imageSizePercent?: number;
+      }>("site_overlays");
     const record = await collection.findOne({ _id: OVERLAY_ALERT_ID });
     if (!record?.enabled || !record.message) {
       return null;
@@ -92,6 +96,10 @@ async function getOverlayAlert() {
       imageUrl: record.imageUrl ?? "",
       ctaText: record.ctaText ?? "",
       ctaUrl: record.ctaUrl ?? "",
+      target: record.target ?? "all",
+      customPaths: record.customPaths ?? [],
+      imageSize: record.imageSize ?? "md",
+      imageSizePercent: record.imageSizePercent ?? null,
     };
   } catch {
     return null;

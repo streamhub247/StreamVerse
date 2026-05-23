@@ -65,6 +65,10 @@ export async function GET(request: NextRequest) {
     imageUrl?: string;
     ctaText?: string;
     ctaUrl?: string;
+    target?: OverlayAlertPayload["target"];
+    customPaths?: string[];
+    imageSize?: OverlayAlertPayload["imageSize"];
+    imageSizePercent?: number;
     updatedAt: string;
   }>("site_overlays");
   const record = await collection.findOne({ _id: ALERT_ID });
@@ -79,6 +83,10 @@ export async function GET(request: NextRequest) {
     imageUrl: record?.imageUrl ?? "",
     ctaText: record?.ctaText ?? "",
     ctaUrl: record?.ctaUrl ?? "",
+    target: record?.target ?? "all",
+    customPaths: record?.customPaths ?? [],
+    imageSize: record?.imageSize ?? "md",
+    imageSizePercent: record?.imageSizePercent ?? null,
     updatedAt: record?.updatedAt ?? null,
   });
 }

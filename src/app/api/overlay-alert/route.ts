@@ -16,6 +16,10 @@ export async function GET() {
     imageUrl?: string;
     ctaText?: string;
     ctaUrl?: string;
+    target?: "all" | "home" | "admin" | "custom";
+    customPaths?: string[];
+    imageSize?: "sm" | "md" | "lg";
+    imageSizePercent?: number | null;
   }>("site_overlays");
   const record = await collection.findOne({ _id: ALERT_ID });
 
