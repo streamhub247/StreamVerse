@@ -24,7 +24,7 @@ const STREAMED_MATCH_ENDPOINTS = [
 ];
 
 type StreamItem = {
-  id: number;
+  id: number | string;
   name: string;
   tag: string;
   source_tag?: string;
@@ -41,6 +41,7 @@ type StreamItem = {
   viewers?: string | number;
   description?: string;
   substreams?: StreamItem[];
+  is_manual?: boolean;
 };
 
 type CategoryGroup = {
@@ -75,6 +76,22 @@ type StreamOverride = {
   kind?: "embed" | "m3u8";
   rank?: number;
   hidden?: boolean;
+};
+
+type ManualStream = {
+  id: string;
+  name: string;
+  uri_name: string;
+  tag: string;
+  category_name?: string;
+  poster: string;
+  starts_at: number;
+  ends_at: number;
+  always_live?: boolean;
+  viewers?: number | string;
+  description?: string;
+  stream_url: string;
+  stream_kind: "embed" | "m3u8";
 };
 
 type StreamedMatchSource = {
@@ -232,6 +249,45 @@ async function fetchAdminSources(uriName: string): Promise<AdminStreamSource[]> 
   }
 }
 
+async function fetchManualStream(uriName: string) {
+  try {
+    const db = await getDatabase();
+    const collection = db.collection<ManualStream>("admin_manual_streams");
+    const record = await collection.findOne({ uri_name: uriName });
+    if (!record) {
+      return null;
+    }
+    const stream: StreamItem = {
+      id: record.id,
+      name: record.name,
+      tag: record.tag,
+      source_tag: record.tag,
+      poster: record.poster,
+      uri_name: record.uri_name,
+      starts_at: record.starts_at,
+      ends_at: record.ends_at,
+      always_live: record.always_live ? 1 : 0,
+      category_name: record.category_name,
+      iframe: record.stream_url,
+      viewers: record.viewers ?? "0",
+      description: record.description,
+      is_manual: true,
+    };
+
+    const source: StreamSource = {
+      label: `${record.tag.toUpperCase()} • Manual`,
+      src: record.stream_url,
+      kind: record.stream_kind,
+      origin: "admin",
+      key: `manual:${record.id}`,
+    };
+
+    return { stream, source };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchStreamedSources(streamName: string, streamSlug: string): Promise<StreamSource[]> {
   const endpoints = STREAMED_MATCH_ENDPOINTS.map((path) => `${STREAMED_API_BASE}${path}`);
 
@@ -361,6 +417,14 @@ export default async function StreamPage({ params }: Props) {
       }
     }
 
+    if (!stream) {
+      const manual = await fetchManualStream(uri_name);
+      if (manual) {
+        stream = manual.stream;
+        streamSources.push(manual.source);
+      }
+    }
+
     if (stream) {
       const adminSources = await fetchAdminSources(uri_name);
       for (const source of adminSources) {
@@ -377,7 +441,7 @@ export default async function StreamPage({ params }: Props) {
         }
       }
 
-      const streamedSources = await fetchStreamedSources(stream.name, uri_name);
+      const streamedSources = stream.is_manual ? [] : await fetchStreamedSources(stream.name, uri_name);
       for (const source of streamedSources) {
         const exists = streamSources.some((item) => item.src === source.src);
         if (!exists) {

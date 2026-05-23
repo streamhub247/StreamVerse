@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    domains: ["api.ppv.to", "thumbs.poocloud.in", "thumbs.poocloud.in"],
+    domains: ["api.ppv.to", "thumbs.poocloud.in", "www.fotball.no"],
   },
 };
 

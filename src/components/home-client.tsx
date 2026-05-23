@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type StreamItem = {
-  id: number;
+  id: number | string;
   name: string;
   tag: string;
   poster: string;
@@ -16,6 +16,7 @@ type StreamItem = {
   viewers: string | number;
   category_name?: string;
   always_live?: number | boolean;
+  is_manual?: boolean;
 };
 
 type CategoryGroup = {
@@ -240,13 +241,22 @@ export default function HomeClient({ initialData }: { initialData: HomeData }) {
     [initialData.streams]
   );
 
-  const liveStreams = useMemo(
-    () => allStreams.filter((s) => s.starts_at <= now && now <= s.ends_at),
-    [allStreams, now]
-  );
+  const liveStreams = useMemo(() => {
+    const live = allStreams.filter(
+      (s) => Boolean(s.always_live) || (s.starts_at <= now && now <= s.ends_at)
+    );
+    return live.sort(
+      (a, b) =>
+        Number(Boolean(b.is_manual)) - Number(Boolean(a.is_manual)) ||
+        parseViewers(b.viewers) - parseViewers(a.viewers)
+    );
+  }, [allStreams, now]);
 
   const upcomingStreams = useMemo(
-    () => allStreams.filter((s) => s.starts_at > now).sort((a, b) => a.starts_at - b.starts_at),
+    () =>
+      allStreams
+        .filter((s) => !s.always_live && s.starts_at > now)
+        .sort((a, b) => a.starts_at - b.starts_at),
     [allStreams, now]
   );
 
@@ -255,10 +265,12 @@ export default function HomeClient({ initialData }: { initialData: HomeData }) {
     [allStreams]
   );
 
-  const trendingStreams = useMemo(
-    () => [...upcomingStreams].slice(0, 12),
-    [upcomingStreams]
-  );
+  const trendingStreams = useMemo(() => {
+    const sorted = [...upcomingStreams].sort(
+      (a, b) => Number(Boolean(b.is_manual)) - Number(Boolean(a.is_manual)) || a.starts_at - b.starts_at
+    );
+    return sorted.slice(0, 12);
+  }, [upcomingStreams]);
 
   const categoryRails = useMemo(
     () => initialData.streams.slice(0, 4),

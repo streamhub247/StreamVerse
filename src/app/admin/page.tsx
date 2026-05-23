@@ -1,11 +1,13 @@
 import AdminClient from "./admin-client";
+import { getDatabase } from "@/lib/mongodb";
 
 const STREAMS_API = "https://api.ppv.to/api/streams";
 
 type StreamItem = {
-  id: number;
+  id: number | string;
   name: string;
   uri_name: string;
+  is_manual?: boolean;
 };
 
 type CategoryGroup = {
@@ -40,5 +42,25 @@ export default async function AdminPage() {
     }))
   );
 
-  return <AdminClient streams={streams} />;
+  const db = await getDatabase();
+  const manualCollection = db.collection<{
+    id: string;
+    name: string;
+    uri_name: string;
+  }>("admin_manual_streams");
+  const manualStreams = await manualCollection
+    .find({}, { projection: { id: 1, name: 1, uri_name: 1 } })
+    .toArray();
+
+  const combined = [
+    ...manualStreams.map((stream) => ({
+      id: stream.id,
+      name: stream.name,
+      uri_name: stream.uri_name,
+      is_manual: true,
+    })),
+    ...streams,
+  ];
+
+  return <AdminClient streams={combined} />;
 }

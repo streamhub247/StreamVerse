@@ -3,9 +3,26 @@
 import { useEffect, useMemo, useState } from "react";
 
 type StreamItem = {
-  id: number;
+  id: number | string;
   name: string;
   uri_name: string;
+  is_manual?: boolean;
+};
+
+type ManualStream = {
+  id: string;
+  name: string;
+  uri_name: string;
+  tag: string;
+  category_name?: string;
+  poster: string;
+  starts_at: number;
+  ends_at: number;
+  always_live?: boolean;
+  viewers?: number | string;
+  description?: string;
+  stream_url: string;
+  stream_kind: "embed" | "m3u8";
 };
 
 type StreamSource = {
@@ -28,7 +45,21 @@ const SOURCE_KIND_OPTIONS: Array<{ label: string; value: "embed" | "m3u8" }> = [
   { label: "M3U8 link", value: "m3u8" },
 ];
 
+function toLocalDatetimeInput(date: Date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function fromLocalDatetimeInput(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return Math.floor(date.getTime() / 1000);
+}
+
 export default function AdminClient({ streams }: AdminClientProps) {
+  const [streamOptions, setStreamOptions] = useState<StreamItem[]>(streams);
   const [selectedStream, setSelectedStream] = useState<StreamItem | null>(streams[0] ?? null);
   const [sources, setSources] = useState<StreamSource[]>([]);
   const [loadingSources, setLoadingSources] = useState(false);
@@ -47,10 +78,29 @@ export default function AdminClient({ streams }: AdminClientProps) {
   const [editUrl, setEditUrl] = useState("");
   const [editKind, setEditKind] = useState<"embed" | "m3u8">("embed");
   const [editHidden, setEditHidden] = useState(false);
+  const [manualStreams, setManualStreams] = useState<ManualStream[]>([]);
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualSaving, setManualSaving] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [editingManualId, setEditingManualId] = useState<string | null>(null);
+  const [manualName, setManualName] = useState("");
+  const [manualSlug, setManualSlug] = useState("");
+  const [manualTag, setManualTag] = useState("");
+  const [manualCategory, setManualCategory] = useState("");
+  const [manualPoster, setManualPoster] = useState("");
+  const [manualStreamUrl, setManualStreamUrl] = useState("");
+  const [manualStreamKind, setManualStreamKind] = useState<"embed" | "m3u8">("embed");
+  const [manualStartsAt, setManualStartsAt] = useState(() => toLocalDatetimeInput(new Date()));
+  const [manualEndsAt, setManualEndsAt] = useState(() =>
+    toLocalDatetimeInput(new Date(Date.now() + 2 * 60 * 60 * 1000))
+  );
+  const [manualAlwaysLive, setManualAlwaysLive] = useState(false);
+  const [manualViewers, setManualViewers] = useState("");
+  const [manualDescription, setManualDescription] = useState("");
 
   const orderedStreams = useMemo(
-    () => [...streams].sort((a, b) => a.name.localeCompare(b.name)),
-    [streams]
+    () => [...streamOptions].sort((a, b) => a.name.localeCompare(b.name)),
+    [streamOptions]
   );
 
   const loadSources = async (uriName: string) => {
@@ -72,11 +122,55 @@ export default function AdminClient({ streams }: AdminClientProps) {
     }
   };
 
+  const mergeManualStreams = (items: ManualStream[]) => {
+    const manualItems: StreamItem[] = items.map((stream) => ({
+      id: stream.id,
+      name: stream.name,
+      uri_name: stream.uri_name,
+      is_manual: true,
+    }));
+
+    setStreamOptions((previous) => {
+      const nonManual = previous.filter((item) => !item.is_manual);
+      return [...manualItems, ...nonManual];
+    });
+  };
+
+  const loadManualStreams = async () => {
+    setManualLoading(true);
+    setManualError(null);
+    try {
+      const res = await fetch("/api/admin/manual-streams");
+      if (!res.ok) {
+        const payload = (await res.json()) as { message?: string };
+        throw new Error(payload.message ?? "Failed to load manual streams");
+      }
+      const data = (await res.json()) as { streams: ManualStream[] };
+      setManualStreams(data.streams);
+      mergeManualStreams(data.streams);
+    } catch (err) {
+      setManualError(err instanceof Error ? err.message : "Failed to load manual streams");
+    } finally {
+      setManualLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (selectedStream) {
       void loadSources(selectedStream.uri_name);
     }
   }, [selectedStream]);
+
+  useEffect(() => {
+    setStreamOptions(streams);
+    if (!selectedStream && streams[0]) {
+      setSelectedStream(streams[0]);
+    }
+  }, [streams, selectedStream]);
+
+  useEffect(() => {
+    void loadManualStreams();
+  }, []);
 
   useEffect(() => {
     if (noticeLoaded) {
@@ -254,6 +348,111 @@ export default function AdminClient({ streams }: AdminClientProps) {
     }
   };
 
+  const resetManualForm = () => {
+    setEditingManualId(null);
+    setManualName("");
+    setManualSlug("");
+    setManualTag("");
+    setManualCategory("");
+    setManualPoster("");
+    setManualStreamUrl("");
+    setManualStreamKind("embed");
+    setManualStartsAt(toLocalDatetimeInput(new Date()));
+    setManualEndsAt(toLocalDatetimeInput(new Date(Date.now() + 2 * 60 * 60 * 1000)));
+    setManualAlwaysLive(false);
+    setManualViewers("");
+    setManualDescription("");
+  };
+
+  const startEditManual = (stream: ManualStream) => {
+    setEditingManualId(stream.id);
+    setManualName(stream.name);
+    setManualSlug(stream.uri_name);
+    setManualTag(stream.tag);
+    setManualCategory(stream.category_name ?? "");
+    setManualPoster(stream.poster);
+    setManualStreamUrl(stream.stream_url);
+    setManualStreamKind(stream.stream_kind);
+    setManualStartsAt(toLocalDatetimeInput(new Date(stream.starts_at * 1000)));
+    setManualEndsAt(toLocalDatetimeInput(new Date(stream.ends_at * 1000)));
+    setManualAlwaysLive(Boolean(stream.always_live));
+    setManualViewers(stream.viewers ? String(stream.viewers) : "");
+    setManualDescription(stream.description ?? "");
+  };
+
+  const handleManualSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setManualSaving(true);
+    setManualError(null);
+
+    const startsAt = fromLocalDatetimeInput(manualStartsAt);
+    const endsAt = fromLocalDatetimeInput(manualEndsAt);
+
+    if (startsAt === null || endsAt === null) {
+      setManualError("Please provide valid start and end times.");
+      setManualSaving(false);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/admin/manual-streams", {
+        method: editingManualId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingManualId ?? undefined,
+          name: manualName.trim(),
+          uri_name: manualSlug.trim() || undefined,
+          tag: manualTag.trim(),
+          category_name: manualCategory.trim() || undefined,
+          poster: manualPoster.trim(),
+          stream_url: manualStreamUrl.trim(),
+          stream_kind: manualStreamKind,
+          starts_at: startsAt,
+          ends_at: endsAt,
+          always_live: manualAlwaysLive,
+          viewers: manualViewers.trim() || undefined,
+          description: manualDescription.trim() || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const payload = (await res.json()) as { message?: string };
+        throw new Error(payload.message ?? "Failed to save manual stream");
+      }
+
+      await loadManualStreams();
+      resetManualForm();
+    } catch (err) {
+      setManualError(err instanceof Error ? err.message : "Failed to save manual stream");
+    } finally {
+      setManualSaving(false);
+    }
+  };
+
+  const handleManualDelete = async (streamId: string) => {
+    setManualSaving(true);
+    setManualError(null);
+    try {
+      const res = await fetch("/api/admin/manual-streams", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: streamId }),
+      });
+      if (!res.ok) {
+        const payload = (await res.json()) as { message?: string };
+        throw new Error(payload.message ?? "Failed to delete manual stream");
+      }
+      await loadManualStreams();
+      if (editingManualId === streamId) {
+        resetManualForm();
+      }
+    } catch (err) {
+      setManualError(err instanceof Error ? err.message : "Failed to delete manual stream");
+    } finally {
+      setManualSaving(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#050505] text-white">
       <div className="w-full border-b border-zinc-900/80 bg-black/70 backdrop-blur">
@@ -341,10 +540,232 @@ export default function AdminClient({ streams }: AdminClientProps) {
               >
                 {orderedStreams.map((stream) => (
                   <option key={stream.id} value={stream.uri_name}>
-                    {stream.name}
+                    {stream.is_manual ? `Manual • ${stream.name}` : stream.name}
                   </option>
                 ))}
               </select>
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-zinc-800/80 bg-zinc-950/80 p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Manual streams</h2>
+              <p className="text-sm text-zinc-400">
+                Add streams that are missing from the API so they show up across the site.
+              </p>
+            </div>
+            {manualLoading && <span className="text-xs text-zinc-500">Loading...</span>}
+          </div>
+
+          {manualError && (
+            <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+              {manualError}
+            </div>
+          )}
+
+          <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="space-y-3">
+              {manualStreams.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-zinc-800/80 bg-black/40 p-6 text-sm text-zinc-500">
+                  No manual streams yet. Use the form to add the first one.
+                </div>
+              ) : (
+                manualStreams.map((stream) => (
+                  <div
+                    key={stream.id}
+                    className="flex flex-col gap-3 rounded-xl border border-zinc-800/80 bg-black/40 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <div className="text-sm font-semibold text-white">{stream.name}</div>
+                      <div className="text-xs text-zinc-500 mt-1">
+                        {stream.tag} • {stream.category_name || "Manual"}
+                      </div>
+                      <div className="text-xs text-zinc-400 mt-2 break-all">
+                        {stream.uri_name}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEditManual(stream)}
+                        disabled={manualSaving}
+                        className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-xs font-semibold text-emerald-300 hover:border-emerald-500/70 disabled:opacity-60"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleManualDelete(stream.id)}
+                        disabled={manualSaving}
+                        className="rounded-full border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-400 hover:border-red-500/70 disabled:opacity-60"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800/80 bg-black/40 p-5">
+              <h3 className="text-base font-semibold">
+                {editingManualId ? "Edit manual stream" : "Add manual stream"}
+              </h3>
+              <form onSubmit={handleManualSubmit} className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Stream name</label>
+                  <input
+                    value={manualName}
+                    onChange={(event) => setManualName(event.target.value)}
+                    placeholder="e.g. Real Madrid vs Barcelona"
+                    className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Stream slug (uri_name)</label>
+                  <input
+                    value={manualSlug}
+                    onChange={(event) => setManualSlug(event.target.value)}
+                    placeholder="e.g. laliga/2026-05-20/rma-bar"
+                    className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Tag / League</label>
+                    <input
+                      value={manualTag}
+                      onChange={(event) => setManualTag(event.target.value)}
+                      placeholder="e.g. La Liga"
+                      className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Category</label>
+                    <input
+                      value={manualCategory}
+                      onChange={(event) => setManualCategory(event.target.value)}
+                      placeholder="e.g. Soccer"
+                      className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Stream thumbnail</label>
+                  <input
+                    value={manualPoster}
+                    onChange={(event) => setManualPoster(event.target.value)}
+                    placeholder="https://..."
+                    className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Stream link</label>
+                  <input
+                    value={manualStreamUrl}
+                    onChange={(event) => setManualStreamUrl(event.target.value)}
+                    placeholder="https://..."
+                    className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Stream link type</label>
+                  <div className="flex flex-col gap-2">
+                    {SOURCE_KIND_OPTIONS.map((option) => (
+                      <label
+                        key={option.value}
+                        className={`flex items-center justify-between rounded-xl border px-4 py-3 text-sm transition ${
+                          manualStreamKind === option.value
+                            ? "border-emerald-500/70 bg-emerald-500/10"
+                            : "border-zinc-800/80 bg-black/40"
+                        }`}
+                      >
+                        <span>{option.label}</span>
+                        <input
+                          type="radio"
+                          name="manual-stream-kind"
+                          value={option.value}
+                          checked={manualStreamKind === option.value}
+                          onChange={() => setManualStreamKind(option.value)}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Start time</label>
+                    <input
+                      type="datetime-local"
+                      value={manualStartsAt}
+                      onChange={(event) => setManualStartsAt(event.target.value)}
+                      className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">End time</label>
+                    <input
+                      type="datetime-local"
+                      value={manualEndsAt}
+                      onChange={(event) => setManualEndsAt(event.target.value)}
+                      className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                      required
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-zinc-300">
+                  <input
+                    type="checkbox"
+                    checked={manualAlwaysLive}
+                    onChange={(event) => setManualAlwaysLive(event.target.checked)}
+                  />
+                  Always live
+                </label>
+                <div>
+                  <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Viewers (optional)</label>
+                  <input
+                    value={manualViewers}
+                    onChange={(event) => setManualViewers(event.target.value)}
+                    placeholder="e.g. 125k"
+                    className="w-full rounded-full border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wide text-zinc-500 mb-2">Description (optional)</label>
+                  <textarea
+                    value={manualDescription}
+                    onChange={(event) => setManualDescription(event.target.value)}
+                    placeholder="Add details for the stream..."
+                    className="min-h-20 w-full rounded-2xl border border-zinc-800/80 bg-black/70 px-4 py-3 text-sm"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="submit"
+                    disabled={manualSaving}
+                    className="flex-1 rounded-full bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-60"
+                  >
+                    {manualSaving ? "Saving..." : editingManualId ? "Save changes" : "Add manual stream"}
+                  </button>
+                  {editingManualId && (
+                    <button
+                      type="button"
+                      onClick={resetManualForm}
+                      disabled={manualSaving}
+                      className="rounded-full border border-zinc-700/80 bg-black/60 px-4 py-3 text-sm text-zinc-200"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </form>
             </div>
           </div>
         </section>
