@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import AdminClient from "./admin-client";
 import { getDatabase } from "@/lib/mongodb";
 
@@ -17,6 +18,14 @@ type CategoryGroup = {
 
 type StreamsResponse = {
   streams: CategoryGroup[];
+};
+
+export const metadata: Metadata = {
+  title: "Admin Dashboard",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default async function AdminPage() {

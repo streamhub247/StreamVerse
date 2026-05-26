@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import { getDatabase } from "@/lib/mongodb";
+import { buildAbsoluteUrl, getBaseUrl, SITE_DESCRIPTION, SITE_NAME } from "@/lib/seo";
 import OverlayAlertClient from "@/components/overlay-alert-client";
 import "./globals.css";
 
@@ -16,8 +17,39 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DBS Streamz",
-  description: "Pay-as-you-go sports streaming for Nepal. Preview app.",
+  metadataBase: new URL(getBaseUrl()),
+  title: {
+    default: SITE_NAME,
+    template: `%s | ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: buildAbsoluteUrl("/"),
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
 };
 
 export const dynamic = "force-dynamic";
@@ -111,6 +143,17 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const organizationLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: SITE_NAME,
+    url: buildAbsoluteUrl("/"),
+    potentialAction: {
+      "@type": "WatchAction",
+      target: buildAbsoluteUrl("/live"),
+    },
+  };
+
   const notice = await getNotice();
   const overlayAlert = await getOverlayAlert();
   const toneClasses = {
@@ -138,6 +181,12 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
+        <Script
+          id="jsonld-website"
+          type="application/ld+json"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationLd) }}
+        />
         <Script
           id="popunder-global"
           src="https://pl29523896.effectivecpmnetwork.com/f4/5e/08/f45e08efcf787f5e4b6b0cc0100a32b4.js"

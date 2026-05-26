@@ -3,9 +3,9 @@
 import Image from "next/image";
 import Script from "next/script";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
-type StreamItem = {
+export type StreamItem = {
   id: number | string;
   name: string;
   tag: string;
@@ -19,12 +19,12 @@ type StreamItem = {
   is_manual?: boolean;
 };
 
-type CategoryGroup = {
+export type CategoryGroup = {
   category: string;
   streams: StreamItem[];
 };
 
-type HomeData = {
+export type HomeData = {
   streams: CategoryGroup[];
 };
 
@@ -33,10 +33,14 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
 function formatTime(seconds: number) {
-  return new Date(seconds * 1000).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(seconds * 1000));
+  } catch {
+    return new Date(seconds * 1000).toISOString();
+  }
 }
 
 function formatCountdown(diffSeconds: number) {
@@ -230,12 +234,20 @@ function AdSlot({ id }: { id: string }) {
   );
 }
 
-export default function HomeClient({ initialData }: { initialData: HomeData }) {
+export default function HomeClient({ initialData, serverNow }: { initialData: HomeData; serverNow?: number }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const categories = useMemo(() => initialData.streams.map((c) => c.category), [initialData.streams]);
 
-  const now = Math.floor(Date.now() / 1000);
+  const [now, setNow] = useState<number>(() => (typeof serverNow === "number" ? serverNow : Math.floor(Date.now() / 1000)));
+
+  useEffect(() => {
+    if (typeof serverNow === "number") {
+      setNow(serverNow);
+    }
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
+    return () => clearInterval(id);
+  }, [serverNow]);
   const allStreams = useMemo(
     () => initialData.streams.flatMap((c) => c.streams),
     [initialData.streams]

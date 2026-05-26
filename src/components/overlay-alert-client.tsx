@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
+import { usePathname } from "next/navigation";
 
 type OverlayAlert = {
   enabled: boolean;
@@ -22,11 +23,9 @@ type OverlayAlertClientProps = {
   initialAlert: OverlayAlert | null;
 };
 
-const POLL_INTERVAL_MS = 2000;
-
 export default function OverlayAlertClient({ initialAlert }: OverlayAlertClientProps) {
-  const [alert, setAlert] = useState<OverlayAlert | null>(initialAlert);
-  const lastPayloadRef = useRef<string>("");
+  const pathname = usePathname();
+  const alert = initialAlert;
 
   function shouldShowForPath(alert: OverlayAlert | null, pathname: string) {
     if (!alert || !alert.enabled) return false;
@@ -47,70 +46,15 @@ export default function OverlayAlertClient({ initialAlert }: OverlayAlertClientP
     return true;
   }
 
-  const [visible, setVisible] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return shouldShowForPath(initialAlert, window.location.pathname);
-  });
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchAlert = async () => {
-      try {
-        const res = await fetch("/api/overlay-alert", { cache: "no-store" });
-        if (!res.ok) {
-          return;
-        }
-        const data = (await res.json()) as OverlayAlert;
-        const payload = JSON.stringify(data);
-        if (payload === lastPayloadRef.current) {
-          return;
-        }
-        lastPayloadRef.current = payload;
-        if (isMounted) {
-          setAlert(data.enabled ? data : null);
-        }
-      } catch {
-        // ignore polling errors
-      }
-    };
-
-    const interval = window.setInterval(fetchAlert, POLL_INTERVAL_MS);
-    void fetchAlert();
-
-    return () => {
-      isMounted = false;
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void fetch("/api/overlay-alert", { cache: "no-store" })
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
-            if (!data) {
-              return;
-            }
-            setAlert((data as OverlayAlert).enabled ? (data as OverlayAlert) : null);
-          })
-          .catch(() => undefined);
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
+  const visible = useMemo(() => {
+    return shouldShowForPath(alert, pathname || "");
+  }, [alert, pathname]);
 
   const overlaySizeClasses = {
     sm: "max-w-lg p-6 text-base",
     md: "max-w-2xl p-8 text-lg",
     lg: "max-w-4xl p-10 text-xl",
   } as const;
-  useEffect(() => {
-    setVisible(shouldShowForPath(alert, window.location.pathname));
-  }, [alert]);
 
   const overlayStyle = alert?.backgroundColor || alert?.textColor
     ? {

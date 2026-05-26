@@ -4,7 +4,7 @@ import { getDatabase } from "@/lib/mongodb";
 
 const ADMIN_COOKIE = "admin_access";
 const STREAMS_APIS = [{ label: "Primary", url: "https://api.ppv.to/api/streams" }];
-const STREAMED_API_BASE = "https://streamed.pk";
+const STREAMED_API_BASE = "https://streamed.st";
 const STREAMED_MATCH_ENDPOINTS = [
   "/api/matches/live",
   "/api/matches/live/popular",
@@ -129,6 +129,32 @@ function normalizeTitle(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "").trim();
 }
 
+function tokenizeTitle(value: string) {
+  const stopWords = new Set(["vs", "v", "live", "stream", "the"]);
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 1 && !stopWords.has(token));
+}
+
+function hasTokenOverlap(left: string, right: string, minMatches = 2) {
+  const leftTokens = new Set(tokenizeTitle(left));
+  const rightTokens = tokenizeTitle(right);
+  if (leftTokens.size === 0 || rightTokens.length === 0) {
+    return false;
+  }
+  let overlap = 0;
+  for (const token of rightTokens) {
+    if (leftTokens.has(token)) {
+      overlap += 1;
+    }
+  }
+  const threshold = Math.min(minMatches, rightTokens.length);
+  return overlap >= Math.max(1, threshold);
+}
+
 function titlesMatch(a: string, b: string) {
   const left = normalizeTitle(a);
   const right = normalizeTitle(b);
@@ -145,7 +171,15 @@ function matchTeams(streamName: string, match: StreamedMatch) {
     return false;
   }
   const normalizedName = normalizeTitle(streamName);
-  return normalizedName.includes(normalizeTitle(home)) && normalizedName.includes(normalizeTitle(away));
+  const directMatch =
+    normalizedName.includes(normalizeTitle(home)) &&
+    normalizedName.includes(normalizeTitle(away));
+
+  if (directMatch) {
+    return true;
+  }
+
+  return hasTokenOverlap(streamName, home, 2) && hasTokenOverlap(streamName, away, 2);
 }
 
 function matchStream(streamName: string, streamSlug: string, match: StreamedMatch) {
@@ -201,6 +235,24 @@ function hashSource(value: string) {
   return createHash("sha1").update(value).digest("hex");
 }
 
+function extractStreamedAdminSource(iframeUrl?: string): StreamedMatchSource | null {
+  if (!iframeUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(iframeUrl);
+    const match = url.pathname.match(/\/embed\/admin\/([^/]+)/i);
+    const adminId = match?.[1] ? decodeURIComponent(match[1]) : "";
+    if (!adminId) {
+      return null;
+    }
+    return { source: "admin", id: adminId };
+  } catch {
+    return null;
+  }
+}
+
 async function getOverrides(uriName: string) {
   const db = await getDatabase();
   const collection = db.collection<{ uri_name: string; overrides: OverrideSource[] }>("admin_stream_overrides");
@@ -241,7 +293,11 @@ async function saveOrder(uriName: string, order: string[]) {
   );
 }
 
-async function fetchStreamedSources(streamName: string, streamSlug: string): Promise<ManagedSource[]> {
+async function fetchStreamedSources(
+  streamName: string,
+  streamSlug: string,
+  primaryIframe?: string
+): Promise<ManagedSource[]> {
   const endpoints = STREAMED_MATCH_ENDPOINTS.map((path) => `${STREAMED_API_BASE}${path}`);
 
   const results = await Promise.allSettled(
@@ -259,13 +315,31 @@ async function fetchStreamedSources(streamName: string, streamSlug: string): Pro
     result.status === "fulfilled" ? result.value : []
   );
 
-  const match = matches.find((item) => matchStream(streamName, streamSlug, item));
-  if (!match || !Array.isArray(match.sources)) {
+  const matchedMatches = matches.filter((item) => matchStream(streamName, streamSlug, item));
+  const uniqueMatchSources = matchedMatches
+    .flatMap((match) => (Array.isArray(match.sources) ? match.sources : []))
+    .filter((source, index, list) => {
+      const key = `${source.source}:${String(source.id)}`;
+      return list.findIndex((item) => `${item.source}:${String(item.id)}` === key) === index;
+    });
+
+  const directSource = extractStreamedAdminSource(primaryIframe);
+  if (directSource) {
+    const key = `${directSource.source}:${String(directSource.id)}`;
+    const exists = uniqueMatchSources.some(
+      (item) => `${item.source}:${String(item.id)}` === key
+    );
+    if (!exists) {
+      uniqueMatchSources.unshift(directSource);
+    }
+  }
+
+  if (uniqueMatchSources.length === 0) {
     return [];
   }
 
   const streamResults = await Promise.allSettled(
-    match.sources.map(async (source) => {
+    uniqueMatchSources.map(async (source) => {
       const res = await fetch(
         `${STREAMED_API_BASE}/api/stream/${source.source}/${source.id}`,
         { cache: "no-store" }
@@ -332,6 +406,7 @@ export async function GET(request: NextRequest) {
   }
 
   let streamName: string | null = null;
+  let primaryIframe: string | undefined;
   const ppvSources: ManagedSource[] = [];
 
   const results = await Promise.allSettled(
@@ -355,6 +430,7 @@ export async function GET(request: NextRequest) {
     const { api, stream } = result.value;
     if (!streamName) {
       streamName = stream.name;
+      primaryIframe = stream.iframe;
     }
     if (stream.iframe) {
       const url = stream.iframe;
@@ -380,7 +456,9 @@ export async function GET(request: NextRequest) {
     createdAt: source.createdAt,
   }));
 
-  const streamedSources = streamName ? await fetchStreamedSources(streamName, uriName) : [];
+  const streamedSources = streamName
+    ? await fetchStreamedSources(streamName, uriName, primaryIframe)
+    : [];
 
   const overrides = await getOverrides(uriName);
   const overrideMap = new Map(overrides.map((item) => [item.key, item]));

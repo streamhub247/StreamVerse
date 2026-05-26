@@ -1,7 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Script from "next/script";
 import { createHash } from "crypto";
 import { getDatabase } from "@/lib/mongodb";
+import { buildAbsoluteUrl, SITE_NAME, toAbsoluteImageUrl, buildEventTitle, buildEventDescription } from "@/lib/seo";
 import StreamPlayer from "./stream-player";
 
 export const revalidate = 15;
@@ -12,7 +14,7 @@ const STREAMS_APIS = [
   // { label: "Backup 2", url: "https://your-backup-api.example.com/api/streams" },
 ];
 
-const STREAMED_API_BASE = "https://streamed.pk";
+const STREAMED_API_BASE = "https://streamed.st";
 
 const STREAMED_MATCH_ENDPOINTS = [
   "/api/matches/live",
@@ -126,6 +128,19 @@ type Props = {
   params: Promise<{ slug: string[] | string }>;
 };
 
+function slugValueToUriName(value: string[] | string) {
+  const slug = Array.isArray(value)
+    ? value
+    : typeof value === "string"
+      ? [value]
+      : [];
+
+  return {
+    slug,
+    uri_name: slug.join("/"),
+  };
+}
+
 function normalizeStreams(data: StreamsResponse): StreamItem[] {
   return data.streams.flatMap((category) =>
     category.streams.flatMap((stream) => {
@@ -151,6 +166,32 @@ function normalizeTitle(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "").trim();
 }
 
+function tokenizeTitle(value: string) {
+  const stopWords = new Set(["vs", "v", "live", "stream", "the"]);
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 1 && !stopWords.has(token));
+}
+
+function hasTokenOverlap(left: string, right: string, minMatches = 2) {
+  const leftTokens = new Set(tokenizeTitle(left));
+  const rightTokens = tokenizeTitle(right);
+  if (leftTokens.size === 0 || rightTokens.length === 0) {
+    return false;
+  }
+  let overlap = 0;
+  for (const token of rightTokens) {
+    if (leftTokens.has(token)) {
+      overlap += 1;
+    }
+  }
+  const threshold = Math.min(minMatches, rightTokens.length);
+  return overlap >= Math.max(1, threshold);
+}
+
 function titlesMatch(a: string, b: string) {
   const left = normalizeTitle(a);
   const right = normalizeTitle(b);
@@ -167,7 +208,15 @@ function matchTeams(streamName: string, match: StreamedMatch) {
     return false;
   }
   const normalizedName = normalizeTitle(streamName);
-  return normalizedName.includes(normalizeTitle(home)) && normalizedName.includes(normalizeTitle(away));
+  const directMatch =
+    normalizedName.includes(normalizeTitle(home)) &&
+    normalizedName.includes(normalizeTitle(away));
+
+  if (directMatch) {
+    return true;
+  }
+
+  return hasTokenOverlap(streamName, home, 2) && hasTokenOverlap(streamName, away, 2);
 }
 
 function matchStream(streamName: string, streamSlug: string, match: StreamedMatch) {
@@ -221,6 +270,24 @@ function normalizeStreamedStreams(payload: unknown): StreamedStream[] {
 
 function hashSource(value: string) {
   return createHash("sha1").update(value).digest("hex");
+}
+
+function extractStreamedAdminSource(iframeUrl?: string): StreamedMatchSource | null {
+  if (!iframeUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(iframeUrl);
+    const match = url.pathname.match(/\/embed\/admin\/([^/]+)/i);
+    const adminId = match?.[1] ? decodeURIComponent(match[1]) : "";
+    if (!adminId) {
+      return null;
+    }
+    return { source: "admin", id: adminId };
+  } catch {
+    return null;
+  }
 }
 
 async function fetchOverrides(uriName: string): Promise<StreamOverride[]> {
@@ -288,7 +355,96 @@ async function fetchManualStream(uriName: string) {
   }
 }
 
-async function fetchStreamedSources(streamName: string, streamSlug: string): Promise<StreamSource[]> {
+async function findStreamByUriName(uriName: string): Promise<StreamItem | undefined> {
+  try {
+    const results = await Promise.allSettled(
+      STREAMS_APIS.map(async (api) => {
+        const res = await fetch(api.url, { next: { revalidate: 15 } });
+        if (!res.ok) {
+          return null;
+        }
+        const data = (await res.json()) as StreamsResponse;
+        const all = normalizeStreams(data);
+        return all.find((s) => s.uri_name === uriName) ?? null;
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value) {
+        return result.value;
+      }
+    }
+
+    const manual = await fetchManualStream(uriName);
+    return manual?.stream;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug: slugValue } = await params;
+  const { slug, uri_name } = slugValueToUriName(slugValue);
+  const canonicalPath = `/live/${slug.map((part) => encodeURIComponent(part)).join("/")}`;
+
+  const stream = await findStreamByUriName(uri_name);
+
+  if (!stream) {
+    const title = "Stream not found";
+    const description = "The requested stream could not be found.";
+    return {
+      title,
+      description,
+      alternates: { canonical: canonicalPath },
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  }
+
+  const title = buildEventTitle(stream.name, stream.tag);
+  const description = stream.description?.trim() || buildEventDescription(stream.name, stream.tag);
+  const imageUrl = toAbsoluteImageUrl(stream.poster);
+  const pageUrl = buildAbsoluteUrl(canonicalPath);
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: canonicalPath,
+    },
+    openGraph: {
+      title: `${stream.name} • Live Stream`,
+      description,
+      url: pageUrl,
+      type: "video.other",
+      images: imageUrl ? [{ url: imageUrl, alt: stream.name }] : undefined,
+    },
+    twitter: {
+      card: imageUrl ? "summary_large_image" : "summary",
+      title: `${stream.name} • Live Stream`,
+      description,
+      images: imageUrl ? [imageUrl] : undefined,
+    },
+  };
+}
+
+function parseTeamsFromName(name?: string) {
+  if (!name) return null;
+  // Try common separators: vs, v, -
+  const parts = name.split(/\s+v(?:s)?\.?\s+|\s+vs\.?\s+|\s+-\s+/i).map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return { home: parts[0], away: parts[1] };
+  }
+  return null;
+}
+
+async function fetchStreamedSources(
+  streamName: string,
+  streamSlug: string,
+  primaryIframe?: string
+): Promise<StreamSource[]> {
   const endpoints = STREAMED_MATCH_ENDPOINTS.map((path) => `${STREAMED_API_BASE}${path}`);
 
   const results = await Promise.allSettled(
@@ -306,13 +462,31 @@ async function fetchStreamedSources(streamName: string, streamSlug: string): Pro
     result.status === "fulfilled" ? result.value : []
   );
 
-  const match = matches.find((item) => matchStream(streamName, streamSlug, item));
-  if (!match || !Array.isArray(match.sources)) {
+  const matchedMatches = matches.filter((item) => matchStream(streamName, streamSlug, item));
+  const uniqueMatchSources = matchedMatches
+    .flatMap((match) => (Array.isArray(match.sources) ? match.sources : []))
+    .filter((source, index, list) => {
+      const key = `${source.source}:${String(source.id)}`;
+      return list.findIndex((item) => `${item.source}:${String(item.id)}` === key) === index;
+    });
+
+  const directSource = extractStreamedAdminSource(primaryIframe);
+  if (directSource) {
+    const key = `${directSource.source}:${String(directSource.id)}`;
+    const exists = uniqueMatchSources.some(
+      (item) => `${item.source}:${String(item.id)}` === key
+    );
+    if (!exists) {
+      uniqueMatchSources.unshift(directSource);
+    }
+  }
+
+  if (uniqueMatchSources.length === 0) {
     return [];
   }
 
   const streamResults = await Promise.allSettled(
-    match.sources.map(async (source) => {
+    uniqueMatchSources.map(async (source) => {
       const res = await fetch(
         `${STREAMED_API_BASE}/api/stream/${source.source}/${source.id}`,
         { next: { revalidate: 15 } }
@@ -368,12 +542,7 @@ async function fetchStreamedSources(streamName: string, streamSlug: string): Pro
 
 export default async function StreamPage({ params }: Props) {
   const { slug: slugValue } = await params;
-  const slug = Array.isArray(slugValue)
-    ? slugValue
-    : typeof slugValue === "string"
-      ? [slugValue]
-      : [];
-  const uri_name = slug.join("/");
+  const { uri_name } = slugValueToUriName(slugValue);
 
   let stream: StreamItem | undefined;
   let streamSources: StreamSource[] = [];
@@ -441,7 +610,9 @@ export default async function StreamPage({ params }: Props) {
         }
       }
 
-      const streamedSources = stream.is_manual ? [] : await fetchStreamedSources(stream.name, uri_name);
+      const streamedSources = stream.is_manual
+        ? []
+        : await fetchStreamedSources(stream.name, uri_name, stream.iframe);
       for (const source of streamedSources) {
         const exists = streamSources.some((item) => item.src === source.src);
         if (!exists) {
@@ -524,10 +695,45 @@ export default async function StreamPage({ params }: Props) {
   }
 
   const starts = stream.starts_at
-    ? new Date(stream.starts_at * 1000).toLocaleString()
+    ? (() => {
+        try {
+          return new Intl.DateTimeFormat("en-US", {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(new Date(stream.starts_at * 1000));
+        } catch {
+          return new Date(stream.starts_at * 1000).toISOString();
+        }
+      })()
     : "TBD";
   const posterUrl = stream.poster ?? "";
-  const viewersLabel = `${String(stream.viewers ?? "0").toLocaleString()} viewers`;
+  const viewersLabel = `${new Intl.NumberFormat("en-US").format(Number(stream.viewers ?? 0))} viewers`;
+
+  // Build SportsEvent structured data (JSON-LD)
+  const teams = parseTeamsFromName(stream.name);
+  const ldStart = stream.starts_at ? new Date(stream.starts_at * 1000).toISOString() : undefined;
+  const ldEnd = stream.ends_at ? new Date(stream.ends_at * 1000).toISOString() : undefined;
+  const pageUrl = buildAbsoluteUrl(`/live/${encodeURIComponent(stream.uri_name)}`);
+
+  const structuredData: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "SportsEvent",
+    name: stream.name,
+    description: stream.description || undefined,
+    url: pageUrl,
+    image: posterUrl || undefined,
+    startDate: ldStart,
+    endDate: ldEnd,
+    location: stream.tag ? { "@type": "Place", name: stream.tag } : undefined,
+    organizer: { "@type": "Organization", name: SITE_NAME, url: buildAbsoluteUrl("/") },
+  };
+
+  if (teams) {
+    structuredData.performer = [
+      { "@type": "SportsTeam", name: teams.home },
+      { "@type": "SportsTeam", name: teams.away },
+    ];
+  }
 
   return (
     <div className="min-h-screen bg-[#050505] text-white">
@@ -585,6 +791,12 @@ export default async function StreamPage({ params }: Props) {
           </div>
         </div>
       </section>
+
+      {/* JSON-LD structured data for SportsEvent */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
 
       {/* Main Content */}
       <main className="w-full px-6 py-10">

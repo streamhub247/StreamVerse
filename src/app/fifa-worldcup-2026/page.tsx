@@ -1,5 +1,26 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { buildAbsoluteUrl, SITE_NAME, parseTeamsFromName } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: "FIFA World Cup 2026 Coverage",
+  description: "World Cup 2026 coverage center with upcoming matchdays, host cities, and stream updates.",
+  alternates: {
+    canonical: "/fifa-worldcup-2026",
+  },
+  openGraph: {
+    title: `${SITE_NAME} • FIFA World Cup 2026 Coverage`,
+    description: "World Cup 2026 coverage center with upcoming matchdays, host cities, and stream updates.",
+    url: buildAbsoluteUrl("/fifa-worldcup-2026"),
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE_NAME} • FIFA World Cup 2026 Coverage`,
+    description: "World Cup 2026 coverage center with upcoming matchdays, host cities, and stream updates.",
+  },
+};
 
 type WorldCupHighlight = {
   id: string;
@@ -74,8 +95,38 @@ const WORLD_CUP_MATCHES: WorldCupMatch[] = [
 ];
 
 export default function WorldCupPage() {
+  // Build structured data for the featured world cup matches
+  const events = WORLD_CUP_MATCHES.map((m) => {
+    const teams = parseTeamsFromName(m.title);
+    return {
+      "@type": "SportsEvent",
+      name: m.title,
+      url: buildAbsoluteUrl(`/fifa-worldcup-2026#${encodeURIComponent(m.id)}`),
+      startDate: undefined,
+      image: buildAbsoluteUrl(m.image),
+      location: m.venue ? { "@type": "Place", name: m.venue } : undefined,
+      performer: teams
+        ? [
+            { "@type": "SportsTeam", name: teams.home },
+            { "@type": "SportsTeam", name: teams.away },
+          ]
+        : undefined,
+      description: m.status,
+    } as Record<string, unknown>;
+  });
+
+  const ld = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    itemListElement: events.map((e, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      item: e,
+    })),
+  };
   return (
     <div className="min-h-screen bg-[#050505] text-white">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />
       <header className="w-full sticky top-0 z-50 border-b border-zinc-900/80 bg-black/70 text-white backdrop-blur">
         <div className="w-full flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-5">
